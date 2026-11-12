@@ -2996,7 +2996,23 @@ async function ivantiDeploymentDetails(id) {
 
 async function renderRestarts(refresh) {
   const c = $('#content'), op = App.me.isOperator;
-  const st = App.rs = Object.assign({ q: '', only: true, online: false, final: false, sel: new Set(), data: null }, App.rs || {});
+  const st = App.rs = Object.assign({ q: '', only: true, online: false, final: false, sel: new Set(), data: null, sort: 'name', dir: 1 }, App.rs || {});
+  /* Sortable columns: the value each sorts by, and the direction of the first click (oldest restart first, most reminders first) */
+  const RS_SORT = {
+    name: [d => d.name, 1], reasons: [d => (d.reasons || []).join(', '), 1], user: [d => d.user || null, 1], online: [d => (d.online ? 0 : 1), 1],
+    lastBoot: [d => (d.lastBoot ? toDate(d.lastBoot).getTime() : null), 1], reminders: [d => d.reminders || 0, -1],
+    reminder: [d => (!d.canRemind ? 2 : d.finalDue ? 0 : 1), 1]
+  };
+  const sorted = list => {
+    const [get] = RS_SORT[st.sort] || RS_SORT.name;
+    return [...list].sort((a, b) => {
+      const x = get(a), y = get(b);
+      if (x === y) return a.name.localeCompare(b.name);
+      if (x === null || x === undefined) return 1;
+      if (y === null || y === undefined) return -1;
+      return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y))) * st.dir;
+    });
+  };
   c.innerHTML = pageHeader('Restarts', 'Devices ConfigMgr says are waiting for a restart to finish installing updates. Send the signed-in user a reminder to restart.',
     `<span class="hint" id="rsAge"></span><button class="btn" id="rsRefresh" title="Read the list again from ConfigMgr">↻ Refresh</button>`) +
     `<div class="cards" id="rsCards"></div><div class="panel" id="rsPolicy"></div>
@@ -3031,18 +3047,24 @@ async function renderRestarts(refresh) {
   };
   const drawTable = () => {
     const el = $('#rsTable'); if (!el) return;
-    const list = rows(), canSel = list.filter(d => d.canRemind);
+    const list = sorted(rows()), canSel = list.filter(d => d.canRemind);
     [...st.sel].forEach(n => { if (!(st.data.items || []).some(d => d.name === n && d.canRemind)) st.sel.delete(n); });
-    el.innerHTML = list.length ? table([op ? '' : null, 'Device', 'Waiting for', 'Last user', 'Online', 'Last restart', 'Reminders sent', 'Reminder'].filter(x => x !== null), list.slice(0, 2000).map(d => `<tr>
+    const cols = [...(op ? [[null, '']] : []), ['name', 'Device'], ['reasons', 'Waiting for'], ['user', 'Last user'], ['online', 'Online'], ['lastBoot', 'Last restart'], ['reminders', 'Reminders sent'], ['reminder', 'Reminder']];
+    el.innerHTML = list.length ? `<div class="table-wrap"><table class="data"><thead>${sortHead(cols, st)}</thead><tbody>${list.slice(0, 2000).map(d => `<tr>
         ${op ? `<td>${d.canRemind ? `<input type="checkbox" data-sel="${esc(d.name)}" ${st.sel.has(d.name) ? 'checked' : ''} aria-label="Select ${esc(d.name)}">` : ''}</td>` : ''}
         <td class="mono nowrap"><a href="#host/${encodeURIComponent(d.name)}">${esc(d.name)}</a></td>
         <td>${(d.reasons || []).map(r => badge(r, r === 'File rename' ? '' : 'warn')).join(' ')}</td>
         <td>${esc(d.user || '')}</td><td>${d.online ? badge('Online', 'ok') : '<span class="hint">Offline</span>'}</td>
         <td class="nowrap" title="${d.lastActive ? `Last active ${esc(ago(d.lastActive))}` : ''}">${d.lastBoot ? esc(ago(d.lastBoot)) : '<span class="hint">Not known</span>'}</td>
         <td class="nowrap">${d.reminders ? `${num(d.reminders)}<div class="hint">Last ${esc(ago(d.lastReminder))}${d.lastFinal ? ` · final ${esc(ago(d.lastFinal))}` : ''}</div>` : '<span class="hint">None</span>'}</td>
-        <td>${!d.canRemind ? `<span class="hint">${esc(d.why)}</span>` : d.finalDue ? `<span title="${esc(d.finalWhy)}">${badge('Final reminder due', 'warn')}</span><div class="hint">${esc(d.finalWhy)}</div>` : badge('Can send', 'ok')}</td></tr>`).join(''))
+        <td>${!d.canRemind ? `<span class="hint">${esc(d.why)}</span>` : d.finalDue ? `<span title="${esc(d.finalWhy)}">${badge('Final reminder due', 'warn')}</span><div class="hint">${esc(d.finalWhy)}</div>` : badge('Can send', 'ok')}</td></tr>`).join('')}</tbody></table></div>`
       + (list.length > 2000 ? `<p class="hint">Showing the first 2,000 of ${num(list.length)}. Use the filter to narrow it down.</p>` : '')
       : empty((st.data.items || []).length ? 'No devices match.' : 'ConfigMgr reports no devices waiting for a restart.');
+    $$('[data-sort]', el).forEach(th => {
+      th.tabIndex = 0; th.title = 'Sort by this column (click again to reverse)';
+      const go = () => { const k = th.dataset.sort; if (st.sort === k) st.dir = -st.dir; else { st.sort = k; st.dir = RS_SORT[k][1]; } drawTable(); };
+      th.onclick = go; th.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } };
+    });
     if (op && canSel.length) {
       const th = $('thead th', el);
       th.innerHTML = `<input type="checkbox" id="rsAll" aria-label="Select all shown" ${canSel.every(d => st.sel.has(d.name)) ? 'checked' : ''}>`;
