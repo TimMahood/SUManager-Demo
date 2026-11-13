@@ -774,7 +774,7 @@ const signInError = msg => Object.assign(new Error(msg || 'Sign in to carry on.'
 
 /* quiet: a background refresh - not written to the user activity log */
 async function api(path, { method = 'GET', body, quiet = false } = {}) {
-  if (App.demo) { if (path === 'me' && !App.auth) throw signInError(); return Mock.handle(path, method, body, quiet); }
+  if (App.demo) { if (path === 'me' && (!App.auth || /:wrong$/i.test((() => { try { return atob(App.auth); } catch (_) { return ''; } })()))) throw signInError(); return Mock.handle(path, method, body, quiet); }
   const headers = body ? { 'Content-Type': 'application/json' } : {};
   if (quiet) headers['X-SUM-Background'] = '1';
   if (App.auth) headers.Authorization = 'SUM ' + App.auth;   // the app's sign-in page (Basic sign-in under another name, so the browser never pops up its own box)
@@ -5079,7 +5079,7 @@ function showSignIn(note, kind = 'info') {
   $('#signin').classList.remove('hidden');
   const m = $('#loginError');
   m.className = 'signin-msg' + (note ? ' ' + kind : ' hidden'); m.textContent = note || '';
-  if (App.demo) $('#signinHint').textContent = 'Demo: any username and password will do.';
+  if (App.demo) $('#signinHint').textContent = 'Demo: any username and password will do. Use the password wrong to see a failed sign-in.';
   const u = $('#username'); (u.value ? $('#password') : u).focus();
   if (App.signInWait) return App.signInWait;
   return App.signInWait = new Promise(resolve => {
