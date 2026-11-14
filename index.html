@@ -5079,7 +5079,7 @@ function showSignIn(note, kind = 'info') {
   $('#signin').classList.remove('hidden');
   const m = $('#loginError');
   m.className = 'signin-msg' + (note ? ' ' + kind : ' hidden'); m.textContent = note || '';
-  if (App.demo) $('#signinHint').textContent = 'Demo: any username and password will do. Use the password wrong to see a failed sign-in.';
+  if (App.demo) $('#signinHint').textContent = 'Demo: any username and password will do.';
   const u = $('#username'); (u.value ? $('#password') : u).focus();
   if (App.signInWait) return App.signInWait;
   return App.signInWait = new Promise(resolve => {
